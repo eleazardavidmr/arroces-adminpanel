@@ -1,0 +1,14 @@
+@import "tailwindcss";
+:root {
+  font-family: "Epilogue", system-ui, Avenir, Helvetica, Arial, sans-serif;
+}
+@theme {
+  --color-primary: #ec9513;
+  --color-background-light: #f8f7f6;
+  --color-background-dark: #221b10;
+
+  --radius-DEFAULT: 0.5rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
+  --radius-full: 999999px;
+}

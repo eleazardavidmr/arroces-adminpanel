@@ -5,6 +5,7 @@ import { IconSettings } from "@tabler/icons-react";
 import { IconLogout2 } from "@tabler/icons-react";
 import { IconChevronRight } from "@tabler/icons-react";
 import { IconChevronLeft } from "@tabler/icons-react";
+import { IconTrash } from "@tabler/icons-react";
 import { use, useContext, useEffect, useState } from "react";
 import { db } from "../../firebase";
 import {
@@ -13,11 +14,14 @@ import {
   doc,
   updateDoc,
   getDoc,
+  deleteDoc,
 } from "firebase/firestore"; // Agregado getDoc para verificación
 import { ProductContext } from "../Context";
 
 export default function Main() {
   const [orders, setOrders] = useState([]);
+  const [isAsideOpen, setIsAsideOpen] = useState(true);
+  const [orderStatus, setOrderStatus] = useState("");
   const context = useContext(ProductContext);
 
   const loadOrders = async () => {
@@ -28,12 +32,11 @@ export default function Main() {
         ...doc.data(),
       }));
       setOrders(DBorders);
+      console.log(orders);
     } catch (e) {
       console.error("Error getting documents: ", e);
     }
   };
-
-  console.log(orders);
 
   useEffect(() => {
     loadOrders();
@@ -45,7 +48,7 @@ export default function Main() {
     return date.toLocaleDateString("es-ES");
   };
 
-  const setOrderAsCompleted = async (orderId) => {
+  const changeOrderStatus = async (orderId, newStatus) => {
     // Guardamos snapshot para poder revertir si falla la escritura en BD
     const previousOrders = orders;
     const updatedOrders = orders.map((order) => {
@@ -54,7 +57,7 @@ export default function Main() {
           ...order,
           orderInfo: {
             ...order.orderInfo,
-            status: "completed",
+            status: newStatus,
           },
         };
       }
@@ -75,9 +78,9 @@ export default function Main() {
 
       // Actualizar en la base de datos
       await updateDoc(orderDocRef, {
-        "orderInfo.status": "completed",
+        "orderInfo.status": newStatus,
       });
-      console.log("Orden actualizada a completada en la BD");
+      console.log("Orden actualizada a completada en la DB");
     } catch (error) {
       console.error("Error al actualizar la orden en la BD:", error);
       // Revertir el estado local si falla
@@ -88,91 +91,149 @@ export default function Main() {
     }
   };
 
+  const renderOrderStatus = (status) => {
+    if (status === "Completada") {
+      return (
+        <span className="inline-flex rounded-full bg-green-100/10 px-3 py-1 text-sm font-medium leading-5 text-green-400  items-center justify-center">
+          <div className="w-2 h-2 mr-2 bg-green-400 rounded-full"></div>
+          {status}
+        </span>
+      );
+    } else if (status === "Pendiente") {
+      return (
+        <span className="inline-flex rounded-full bg-yellow-100/10 px-3 py-1 text-sm font-medium leading-5 text-yellow-400  items-center justify-center">
+          <div className="w-2 h-2 mr-2 bg-yellow-400 rounded-full"></div>
+          {status}
+        </span>
+      );
+    } else if (status === "En preparación") {
+      return (
+        <span className="inline-flex rounded-full bg-blue-100/10 px-3 py-1 text-sm font-medium leading-5 text-blue-400  items-center justify-center">
+          <div className="w-2 h-2 mr-2 bg-blue-400 rounded-full"></div>
+          {status}
+        </span>
+      );
+    }
+  };
+
+  const deleteOrder = (orderId) => {
+    const docRef = doc(db, "orders", orderId);
+    deleteDoc(docRef)
+      .then(() => {
+        console.log("Entire document has been deleted succesfully");
+        setOrders((prevOrders) =>
+          prevOrders.filter((order) => order.id !== orderId)
+        );
+      })
+      .catch((error) => {
+        console.error(error);
+      });
+  };
+
   return (
-    <main className="flex items-center justify-between h-screen">
-      <aside className="flex w-70 flex-col border-r border-gray-200/10 bg-white/5 p-4 h-full">
-        <div className="flex flex-col gap-4">
-          <div className="flex items-center gap-3">
-            <div
-              className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10"
-              style={{
-                backgroundImage:
-                  "url('https://avatars.githubusercontent.com/u/9919?s=200&v=4')",
-              }}
-            ></div>
-            <div className="flex flex-col">
-              <h1 className="text-white text-base font-medium leading-normal">
-                Sara
-              </h1>
-              <p className="text-gray-400 dark:text-gray-500 text-sm font-normal leading-normal">
-                sara@arrozconleche.com
-              </p>
+    <main className="flex h-screen">
+      {isAsideOpen && (
+        <aside className="flex w-70 flex-col border-r border-gray-200/10 bg-white/5 p-4 h-full">
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center gap-3">
+              <div
+                className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10"
+                style={{
+                  backgroundImage:
+                    "url('https://avatars.githubusercontent.com/u/9919?s=200&v=4')",
+                }}
+              ></div>
+              <div className="flex flex-col">
+                <h1 className="text-white text-base font-medium leading-normal">
+                  Sara
+                </h1>
+                <p className="text-gray-400 dark:text-gray-500 text-sm font-normal leading-normal">
+                  sara@arrozconleche.com
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-col gap-2">
+              <a
+                className="flex items-center gap-3 rounded-lg bg-primary/20 px-3 py-2 text-primary"
+                href="#"
+              >
+                <span>
+                  <IconShoppingCart stroke={2} />
+                </span>
+                <p className="text-sm font-medium leading-normal">Pedidos</p>
+              </a>
+              <a
+                className="flex items-center gap-3 px-3 py-2 text-white/70 hover:bg-white/10 rounded-lg"
+                href="#"
+              >
+                <span>
+                  <IconFolder stroke={2} />
+                </span>
+                <p className="text-sm font-medium leading-normal">Productos</p>
+              </a>
+              <a
+                className="flex items-center gap-3 px-3 py-2 text-white/70 hover:bg-white/10 rounded-lg"
+                href="#"
+              >
+                <span>
+                  <IconUsersGroup stroke={2} />
+                </span>
+                <p className="text-sm font-medium leading-normal">Clientes</p>
+              </a>
             </div>
           </div>
-          <div className="flex flex-col gap-2">
-            <a
-              className="flex items-center gap-3 rounded-lg bg-primary/20 px-3 py-2 text-primary"
-              href="#"
-            >
-              <span>
-                <IconShoppingCart stroke={2} />
-              </span>
-              <p className="text-sm font-medium leading-normal">Pedidos</p>
-            </a>
+          <div className="mt-auto flex flex-col gap-1">
             <a
               className="flex items-center gap-3 px-3 py-2 text-white/70 hover:bg-white/10 rounded-lg"
               href="#"
             >
               <span>
-                <IconFolder stroke={2} />
+                <IconSettings stroke={2} />
               </span>
-              <p className="text-sm font-medium leading-normal">Productos</p>
+              <p className="text-sm font-medium leading-normal">
+                Configuración
+              </p>
             </a>
-            <a
+            <button
               className="flex items-center gap-3 px-3 py-2 text-white/70 hover:bg-white/10 rounded-lg"
               href="#"
+              onClick={() => context.setIsLoggedIn(false)}
             >
               <span>
-                <IconUsersGroup stroke={2} />
+                <IconLogout2 stroke={2} />
               </span>
-              <p className="text-sm font-medium leading-normal">Clientes</p>
-            </a>
+              <p className="text-sm font-medium leading-normal">Salir</p>
+            </button>
           </div>
-        </div>
-        <div className="mt-auto flex flex-col gap-1">
-          <a
-            className="flex items-center gap-3 px-3 py-2 text-white/70 hover:bg-white/10 rounded-lg"
-            href="#"
-          >
-            <span>
-              <IconSettings stroke={2} />
-            </span>
-            <p className="text-sm font-medium leading-normal">Configuración</p>
-          </a>
-          <button
-            className="flex items-center gap-3 px-3 py-2 text-white/70 hover:bg-white/10 rounded-lg"
-            href="#"
-            onClick={() => context.setIsLoggedIn(false)}
-          >
-            <span>
-              <IconLogout2 stroke={2} />
-            </span>
-            <p className="text-sm font-medium leading-normal">Salir</p>
-          </button>
-        </div>
-      </aside>
+        </aside>
+      )}
 
       <main className="flex flex-1 flex-col p-6">
         <div className="flex flex-wrap items-center justify-between gap-4  pb-6">
-          <p className="text-white text-3xl font-bold leading-tight">
-            Gestión de Pedidos
-          </p>
+          <div className="flex items-center gap-3">
+            <button
+              aria-label={
+                isAsideOpen ? "Ocultar menú lateral" : "Mostrar menú lateral"
+              }
+              className="p-2 rounded-md bg-white/5 text-white hover:bg-white/10"
+              onClick={() => setIsAsideOpen((v) => !v)}
+            >
+              {isAsideOpen ? (
+                <IconChevronLeft stroke={2} />
+              ) : (
+                <IconChevronRight stroke={2} />
+              )}
+            </button>
+            <p className="text-white text-3xl font-bold leading-tight">
+              Gestión de Pedidos
+            </p>
+          </div>
         </div>
 
-        <div className="flex-1 overflow-x-auto">
+        <div className="flex-1 overflow-x-auto w-fit">
           <div className="overflow-hidden rounded-xl border border-gray-200/10 bg-white/5">
-            <table className="w-full">
-              <thead className="bg-white/10">
+            <table className="w-fit">
+              <thead className="bg-white/10 w-full">
                 <tr>
                   <th className="px-4 py-3 text-left text-sm font-medium text-white">
                     ID Pedido
@@ -211,7 +272,6 @@ export default function Main() {
               </thead>
               <tbody className="divide-y divide-gray-200/10">
                 {orders.map((order) => {
-                  console.log(order.userInfo.delivery);
                   return (
                     <tr className="hover:bg-white/5" key={order.id}>
                       <td className="px-4 py-4 text-sm text-gray-400">
@@ -245,24 +305,38 @@ export default function Main() {
                           : "Efectivo"}
                       </td>
                       <td className="px-4 py-4 text-sm">
-                        {order.orderInfo.status === "completed" ? (
-                          <span className="inline-flex rounded-full bg-green-100/10 px-3 py-1 text-sm font-medium leading-5 text-green-400  items-center justify-center">
-                            <div className="w-2 h-2 mr-2 bg-green-400 rounded-full"></div>
-                            {order.orderInfo.status}
-                          </span>
-                        ) : (
-                          <span className="inline-flex rounded-full bg-yellow-100/10 px-3 py-1 text-sm font-medium leading-5 text-yellow-400  items-center justify-center">
-                            <div className="w-2 h-2 mr-2 bg-yellow-400 rounded-full"></div>
-                            {order.orderInfo.status}
-                          </span>
-                        )}
+                        {renderOrderStatus(order.orderInfo.status)}
                       </td>
-                      <td>
-                        <button
-                          className="text-sm font-medium text-primary hover:underline"
-                          onClick={() => setOrderAsCompleted(order.id)}
+                      <td className="flex items-center justify-center mt-2 gap-2 mx-2">
+                        <select
+                          name="order-status"
+                          id="order-status"
+                          className="text-sm font-medium text-primary hover:underline "
+                          value={order.orderInfo.status}
+                          onChange={(e) => {
+                            setOrderStatus(e.target.value);
+                            changeOrderStatus(order.id, e.target.value);
+                          }}
                         >
-                          Poner como completado
+                          <option value="" className="text-black">
+                            Selecciona un Estado
+                          </option>
+                          <option value="Pendiente" className="text-black">
+                            Pendiente
+                          </option>
+                          <option value="En preparación" className="text-black">
+                            En preparación
+                          </option>
+                          <option value="Completada" className="text-black">
+                            Completada
+                          </option>
+                        </select>
+
+                        <button
+                          onClick={() => deleteOrder(order.id)}
+                          className="p-2 bg-red-600 rounded-sm hover:bg-red-400 cursor-pointer"
+                        >
+                          <IconTrash stroke={2} />
                         </button>
                       </td>
                     </tr>

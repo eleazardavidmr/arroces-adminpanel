@@ -2,6 +2,7 @@ import Login from "./Components/Login";
 import Main from "./Components/Main";
 import { useContext } from "react";
 import { ProductContext } from "./Components/Context";
+import ChangeOrderStatusModal from "./Components/ChangeOrderStatusModal";
 function App() {
   const context = useContext(ProductContext);
   if (!context.isLoggedIn) {
@@ -10,6 +11,7 @@ function App() {
   return (
     <>
       <Main />
+      <ChangeOrderStatusModal />
     </>
   );
 }

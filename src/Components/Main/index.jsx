@@ -1,30 +1,59 @@
-import { IconShoppingCart } from "@tabler/icons-react";
-import { IconFolder } from "@tabler/icons-react";
-import { IconUsersGroup } from "@tabler/icons-react";
-import { IconSettings } from "@tabler/icons-react";
-import { IconLogout2 } from "@tabler/icons-react";
-import { IconChevronRight } from "@tabler/icons-react";
-import { IconChevronLeft } from "@tabler/icons-react";
-import { IconTrash } from "@tabler/icons-react";
-import { use, useContext, useEffect, useState } from "react";
+import {
+  IconShoppingCart,
+  IconFolder,
+  IconUsersGroup,
+  IconLogout2,
+  IconChevronRight,
+  IconChevronLeft,
+  IconTrash,
+  IconAlertTriangle,
+  IconX,
+} from "@tabler/icons-react";
+import { useContext, useEffect, useState } from "react";
 import { db } from "../../firebase";
 import {
   collection,
   getDocs,
   doc,
   updateDoc,
-  getDoc,
   deleteDoc,
-} from "firebase/firestore"; // Agregado getDoc para verificación
+} from "firebase/firestore";
 import { ProductContext } from "../Context";
+
+// Badge de estado
+// Nota: Mantuve los colores semánticos (Verde/Amarillo) porque son universales,
+// pero ajusté la opacidad para que se vean bien sobre el fondo café.
+const StatusBadge = ({ status }) => {
+  const styles = {
+    Completada: "bg-green-500/20 text-green-400",
+    Pendiente: "bg-yellow-500/20 text-yellow-400",
+    "En preparación": "bg-blue-500/20 text-blue-400",
+    Cancelada: "bg-red-500/20 text-red-400",
+  };
+  const baseStyle =
+    "inline-flex items-center justify-center rounded-full px-3 py-1 text-sm font-medium leading-5 backdrop-blur-sm border border-white/5";
+  const activeStyle = styles[status] || "bg-gray-500/20 text-gray-400";
+
+  return (
+    <span className={`${baseStyle} ${activeStyle}`}>
+      <div className={`w-2 h-2 mr-2 rounded-full bg-current`}></div>
+      {status || "Desconocido"}
+    </span>
+  );
+};
 
 export default function Main() {
   const [orders, setOrders] = useState([]);
   const [isAsideOpen, setIsAsideOpen] = useState(true);
-  const [orderStatus, setOrderStatus] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+
+  const [orderToDelete, setOrderToDelete] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const context = useContext(ProductContext);
 
   const loadOrders = async () => {
+    setIsLoading(true);
     try {
       const querySnapshot = await getDocs(collection(db, "orders"));
       const DBorders = querySnapshot.docs.map((doc) => ({
@@ -32,9 +61,10 @@ export default function Main() {
         ...doc.data(),
       }));
       setOrders(DBorders);
-      console.log(orders);
     } catch (e) {
       console.error("Error getting documents: ", e);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -45,337 +75,353 @@ export default function Main() {
   const formatDate = (timestamp) => {
     if (!timestamp) return "N/A";
     const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-    return date.toLocaleDateString("es-ES");
+    return date.toLocaleDateString("es-CO", {
+      day: "2-digit",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   };
 
   const changeOrderStatus = async (orderId, newStatus) => {
-    // Guardamos snapshot para poder revertir si falla la escritura en BD
-    const previousOrders = orders;
+    const previousOrders = [...orders];
     const updatedOrders = orders.map((order) => {
       if (order.id === orderId) {
         return {
           ...order,
-          orderInfo: {
-            ...order.orderInfo,
-            status: newStatus,
-          },
+          orderInfo: { ...order.orderInfo, status: newStatus },
         };
       }
       return order;
     });
 
-    // Actualización optimista en UI
     setOrders(updatedOrders);
 
     try {
-      // Verificar si el documento existe antes de actualizar
       const orderDocRef = doc(db, "orders", orderId);
-      const orderDocSnap = await getDoc(orderDocRef);
-
-      if (!orderDocSnap.exists()) {
-        throw new Error("El documento no existe en la base de datos.");
-      }
-
-      // Actualizar en la base de datos
-      await updateDoc(orderDocRef, {
-        "orderInfo.status": newStatus,
-      });
-      console.log("Orden actualizada a completada en la DB");
+      await updateDoc(orderDocRef, { "orderInfo.status": newStatus });
     } catch (error) {
-      console.error("Error al actualizar la orden en la BD:", error);
-      // Revertir el estado local si falla
+      console.error("Error update:", error);
       setOrders(previousOrders);
-      alert(
-        `Error al actualizar el estado de la orden: ${error.message}. Inténtalo de nuevo.`
-      );
+      alert("Error al actualizar estado");
     }
   };
 
-  const renderOrderStatus = (status) => {
-    if (status === "Completada") {
-      return (
-        <span className="inline-flex rounded-full bg-green-100/10 px-3 py-1 text-sm font-medium leading-5 text-green-400  items-center justify-center">
-          <div className="w-2 h-2 mr-2 bg-green-400 rounded-full"></div>
-          {status}
-        </span>
+  const promptDelete = (orderId) => {
+    setOrderToDelete(orderId);
+  };
+
+  const confirmDelete = async () => {
+    if (!orderToDelete) return;
+
+    setIsDeleting(true);
+    try {
+      await deleteDoc(doc(db, "orders", orderToDelete));
+      setOrders((prevOrders) =>
+        prevOrders.filter((order) => order.id !== orderToDelete)
       );
-    } else if (status === "Pendiente") {
-      return (
-        <span className="inline-flex rounded-full bg-yellow-100/10 px-3 py-1 text-sm font-medium leading-5 text-yellow-400  items-center justify-center">
-          <div className="w-2 h-2 mr-2 bg-yellow-400 rounded-full"></div>
-          {status}
-        </span>
-      );
-    } else if (status === "En preparación") {
-      return (
-        <span className="inline-flex rounded-full bg-blue-100/10 px-3 py-1 text-sm font-medium leading-5 text-blue-400  items-center justify-center">
-          <div className="w-2 h-2 mr-2 bg-blue-400 rounded-full"></div>
-          {status}
-        </span>
-      );
+      setOrderToDelete(null);
+    } catch (error) {
+      console.error("Error deleting:", error);
+      alert("Hubo un error al eliminar el pedido.");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
-  const deleteOrder = (orderId) => {
-    const docRef = doc(db, "orders", orderId);
-    deleteDoc(docRef)
-      .then(() => {
-        console.log("Entire document has been deleted succesfully");
-        setOrders((prevOrders) =>
-          prevOrders.filter((order) => order.id !== orderId)
-        );
-      })
-      .catch((error) => {
-        console.error(error);
-      });
-  };
+  // COLORES PERSONALIZADOS (Extraídos de tu paleta para referencia)
+  // Primary:background-dark(Naranja/Dorado)
+  // Bg Dark:background-dark(Café Oscuro)
+  // Text Light:background-light(Blanco Hueso)
 
   return (
-    <main className="flex h-screen">
-      {isAsideOpen && (
-        <aside className="flex w-70 flex-col border-r border-gray-200/10 bg-white/5 p-4 h-full">
-          <div className="flex flex-col gap-4">
-            <div className="flex items-center gap-3">
-              <div
-                className="bg-center bg-no-repeat aspect-square bg-cover rounded-full size-10"
-                style={{
-                  backgroundImage:
-                    "url('https://avatars.githubusercontent.com/u/9919?s=200&v=4')",
-                }}
-              ></div>
-              <div className="flex flex-col">
-                <h1 className="text-white text-base font-medium leading-normal">
-                  Sara
-                </h1>
-                <p className="text-gray-400 dark:text-gray-500 text-sm font-normal leading-normal">
-                  sara@arrozconleche.com
-                </p>
-              </div>
+    // Aplicando el fondo oscuro background-dark y el texto clarobackground-light)
+    <main className="flex h-screen bg-background-dark text-background-light relative  selection:bg-background-dark selection:text-">
+      {/* --- MODAL --- */}
+      {orderToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#15100a]/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          {/* El modal usa el mismo fondo dark pero con borde sutil */}
+          <div className="w-full max-w-md transform overflow-hidden rounded-2xl bg-background-dark border border-background-dark/20 p-6 text-left shadow-2xl shadow-black/50 transition-all scale-100">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-lg font-medium leading-6 text-background-light flex items-center gap-2">
+                <IconAlertTriangle
+                  className="text-background-dark"
+                  stroke={2}
+                />
+                Confirmar eliminación
+              </h3>
+              <button
+                onClick={() => setOrderToDelete(null)}
+                className="text-gray-500 hover:text-background-dark transition-colors"
+              >
+                <IconX size={20} />
+              </button>
             </div>
-            <div className="flex flex-col gap-2">
-              <a
-                className="flex items-center gap-3 rounded-lg bg-primary/20 px-3 py-2 text-primary"
-                href="#"
-              >
-                <span>
-                  <IconShoppingCart stroke={2} />
+
+            <div className="mt-2">
+              <p className="text-sm text-gray-400">
+                ¿Estás seguro de que deseas eliminar el pedido{" "}
+                <span className="font-mono text-background-dark font-bold">
+                  #{orderToDelete.slice(0, 6)}
                 </span>
-                <p className="text-sm font-medium leading-normal">Pedidos</p>
-              </a>
-              <a
-                className="flex items-center gap-3 px-3 py-2 text-white/70 hover:bg-white/10 rounded-lg"
-                href="#"
+                ? Esta acción no se puede deshacer.
+              </p>
+            </div>
+
+            <div className="mt-6 flex gap-3 justify-end">
+              <button
+                type="button"
+                className="inline-flex justify-center rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-gray-300 hover:bg-white/10 hover:text-white focus:outline-none transition-colors"
+                onClick={() => setOrderToDelete(null)}
+                disabled={isDeleting}
               >
-                <span>
-                  <IconFolder stroke={2} />
-                </span>
-                <p className="text-sm font-medium leading-normal">Productos</p>
-              </a>
-              <a
-                className="flex items-center gap-3 px-3 py-2 text-white/70 hover:bg-white/10 rounded-lg"
-                href="#"
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className="inline-flex justify-center items-center gap-2 rounded-lg border border-transparent bg-red-500/10 px-4 py-2 text-sm font-medium text-red-500 hover:bg-red-500 hover:text-white transition-all"
+                onClick={confirmDelete}
+                disabled={isDeleting}
               >
-                <span>
-                  <IconUsersGroup stroke={2} />
-                </span>
-                <p className="text-sm font-medium leading-normal">Clientes</p>
-              </a>
+                {isDeleting ? "Eliminando..." : "Sí, eliminar"}
+              </button>
             </div>
           </div>
-          <div className="mt-auto flex flex-col gap-1">
-            <a
-              className="flex items-center gap-3 px-3 py-2 text-white/70 hover:bg-white/10 rounded-lg"
-              href="#"
-            >
-              <span>
-                <IconSettings stroke={2} />
-              </span>
-              <p className="text-sm font-medium leading-normal">
-                Configuración
-              </p>
-            </a>
+        </div>
+      )}
+
+      {/* --- SIDEBAR --- */}
+      {isAsideOpen && (
+        // Sidebar usa fondo oscuro + un borde muy sutil
+        <aside className="flex w-64 flex-col border-r border-white/5 bg-background-dark p-4 h-full">
+          <div className="flex flex-col gap-6">
+            {/* Perfil */}
+            <div className="flex items-center gap-3 px-2">
+              <div className="h-10 w-10 rounded-full border-2 border-background-dark/20 bg-gray-700 bg-[url('https://avatars.githubusercontent.com/u/9919?s=200&v=4')] bg-cover bg-center"></div>
+              <div className="flex flex-col">
+                <h1 className="text-sm font-bold text-background-light">
+                  Sara
+                </h1>
+                <p className="text-xs text-background-dark">Administradora</p>
+              </div>
+            </div>
+
+            {/* Navegación */}
+            <nav className="flex flex-col gap-2">
+              {/* Item Activo: Usa el Primary background-dark */}
+              <a
+                className="flex items-center gap-3 rounded-lg bg-background-dark/10 border border-background-dark/20 px-3 py-2 text-background-dark"
+                href="#"
+              >
+                <IconShoppingCart size={20} stroke={2} />
+                <span className="text-sm font-medium">Pedidos</span>
+              </a>
+              {/* Items Inactivos */}
+              <a
+                className="flex items-center gap-3 rounded-lg px-3 py-2 text-gray-400 hover:bg-white/5 hover:text-background-light transition-colors"
+                href="#"
+              >
+                <IconFolder size={20} stroke={1.5} />
+                <span className="text-sm font-medium">Productos</span>
+              </a>
+              <a
+                className="flex items-center gap-3 rounded-lg px-3 py-2 text-gray-400 hover:bg-white/5 hover:text-background-light transition-colors"
+                href="#"
+              >
+                <IconUsersGroup size={20} stroke={1.5} />
+                <span className="text-sm font-medium">Clientes</span>
+              </a>
+            </nav>
+          </div>
+
+          <div className="mt-auto">
             <button
-              className="flex items-center gap-3 px-3 py-2 text-white/70 hover:bg-white/10 rounded-lg"
-              href="#"
+              className="flex items-center gap-3 rounded-lg px-3 py-2 text-gray-400 hover:bg-red-500/10 hover:text-red-400 w-full transition-colors"
               onClick={() => context.setIsLoggedIn(false)}
             >
-              <span>
-                <IconLogout2 stroke={2} />
-              </span>
-              <p className="text-sm font-medium leading-normal">Salir</p>
+              <IconLogout2 size={20} />
+              <span className="text-sm font-medium">Salir</span>
             </button>
           </div>
         </aside>
       )}
 
-      <main className="flex flex-1 flex-col p-6">
-        <div className="flex flex-wrap items-center justify-between gap-4  pb-6">
+      {/* --- CONTENIDO PRINCIPAL --- */}
+      <main className="flex flex-1 flex-col p-4 md:p-6 overflow-hidden">
+        <header className="flex items-center justify-between gap-4 pb-6">
           <div className="flex items-center gap-3">
             <button
-              aria-label={
-                isAsideOpen ? "Ocultar menú lateral" : "Mostrar menú lateral"
-              }
-              className="p-2 rounded-md bg-white/5 text-white hover:bg-white/10"
-              onClick={() => setIsAsideOpen((v) => !v)}
+              className="rounded-lg bg-white/5 border border-white/5 p-2 text-gray-400 hover:bg-white/10 hover:text-primary transition-colors"
+              onClick={() => setIsAsideOpen(!isAsideOpen)}
             >
               {isAsideOpen ? (
-                <IconChevronLeft stroke={2} />
+                <IconChevronLeft size={20} />
               ) : (
-                <IconChevronRight stroke={2} />
+                <IconChevronRight size={20} />
               )}
             </button>
-            <p className="text-white text-3xl font-bold leading-tight">
+            <h1 className="text-2xl font-bold text-background-light">
               Gestión de Pedidos
-            </p>
+            </h1>
           </div>
-        </div>
+        </header>
 
-        <div className="flex-1 overflow-x-auto w-fit">
-          <div className="overflow-hidden rounded-xl border border-gray-200/10 bg-white/5">
-            <table className="w-fit">
-              <thead className="bg-white/10 w-full">
+        {/* Tarjeta de la Tabla: Usamos white/5 sobre el fondo café para elevarla sutilmente */}
+        <div className="flex-1 overflow-hidden rounded-xl border border-white/5 bg-white/2 shadow-xl flex flex-col relative">
+          {/* Gradiente decorativo opcional en la parte superior para dar el toque "dorado" */}
+          <div className="absolute top-0 left-0 w-full h-1 bg-linear-to-r from-transparent via-primary/50 to-transparent opacity-50"></div>
+
+          <div className="overflow-x-auto flex-1">
+            <table className="w-full min-w-[1000px] text-left">
+              <thead className="bg-white/5 text-xs uppercase text-gray-400 font-semibold tracking-wider">
                 <tr>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-white">
-                    ID Pedido
-                  </th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-white">
-                    Fecha
-                  </th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-white">
-                    Nombre del Cliente
-                  </th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-white">
-                    Celular
-                  </th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-white">
-                    Domicilio
-                  </th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-white">
-                    Dirreción
-                  </th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-white">
-                    Cantidad
-                  </th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-white">
-                    Total
-                  </th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-white">
-                    Pago
-                  </th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-white">
-                    Estado del Pedido
-                  </th>
-                  <th className="px-4 py-3 text-left text-sm font-medium text-white">
-                    Acciones
-                  </th>
+                  <th className="px-6 py-4">Pedido</th>
+                  <th className="px-6 py-4">Cliente</th>
+                  <th className="px-6 py-4">Ubicación</th>
+                  <th className="px-6 py-4 text-center">Cant.</th>
+                  <th className="px-6 py-4">Total / Pago</th>
+                  <th className="px-6 py-4 text-center">Estado</th>
+                  <th className="px-6 py-4 text-right">Acciones</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200/10">
-                {orders.map((order) => {
-                  return (
-                    <tr className="hover:bg-white/5" key={order.id}>
-                      <td className="px-4 py-4 text-sm text-gray-400">
-                        #{order.id}
+              <tbody className="divide-y divide-white/5">
+                {isLoading ? (
+                  <tr>
+                    <td
+                      colSpan="7"
+                      className="px-6 py-12 text-center text-gray-500 animate-pulse"
+                    >
+                      Cargando pedidos...
+                    </td>
+                  </tr>
+                ) : orders.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan="7"
+                      className="px-6 py-12 text-center text-gray-500"
+                    >
+                      No hay pedidos registrados.
+                    </td>
+                  </tr>
+                ) : (
+                  orders.map((order) => (
+                    <tr
+                      className="hover:bg-white/3 transition-colors group"
+                      key={order.id}
+                    >
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col">
+                          <span className="font-mono text-xs text-primary">
+                            #{order.id.slice(0, 6)}...
+                          </span>
+                          <span className="text-sm text-gray-400">
+                            {formatDate(order.date)}
+                          </span>
+                        </div>
                       </td>
-                      <td className="px-4 py-4 text-sm text-gray-400">
-                        {formatDate(order.date)}
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col">
+                          <span className="font-medium text-background-light">
+                            {order.userInfo.name}
+                          </span>
+                          <span className="text-xs text-gray-500">
+                            {order.userInfo.phone}
+                          </span>
+                        </div>
                       </td>
-                      <td className="px-4 py-4 text-sm text-white">
-                        {order.userInfo.name}
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col max-w-[200px]">
+                          <span className="text-sm text-gray-300 truncate">
+                            {order.userInfo.address}
+                          </span>
+                          <span className="text-xs text-gray-500">
+                            {order.userInfo.delivery
+                              ? "🛵 Domicilio"
+                              : "🏪 Recogida"}
+                          </span>
+                        </div>
                       </td>
-                      <td className="px-4 py-4 text-sm text-white">
-                        {order.userInfo.phone}
+                      <td className="px-6 py-4 text-center">
+                        <span className="rounded-md bg-white/5 px-2 py-1 text-sm font-bold text-gray-300 border border-white/5">
+                          {order.orderInfo.quantity}
+                        </span>
                       </td>
-                      <td className="px-4 py-4 text-sm text-white">
-                        {order.userInfo.delivery ? "Si" : "No"}
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col">
+                          {/* PRECIO EN DORADO */}
+                          <span className="font-bold text-primary text-base">
+                            ${order.orderInfo.total}
+                          </span>
+                          <span className="text-xs text-gray-500">
+                            {order.userInfo.payment.includes("Transferencia")
+                              ? "Transferencia"
+                              : "Efectivo"}
+                          </span>
+                        </div>
                       </td>
-                      <td className="px-4 py-4 text-sm text-white">
-                        {order.userInfo.address}
+                      <td className="px-6 py-4 text-center">
+                        <StatusBadge status={order.orderInfo.status} />
                       </td>
-                      <td className="px-4 py-4 text-sm text-white">
-                        {order.orderInfo.quantity}
-                      </td>
-                      <td className="px-4 py-4 text-sm text-gray-400">
-                        ${order.orderInfo.total}
-                      </td>
-                      <td className="px-4 py-4 text-sm text-gray-400">
-                        {order.userInfo.payment ===
-                        "Transferencia (Nequi, Bancolombia, Davivienda)"
-                          ? "Transferencia"
-                          : "Efectivo"}
-                      </td>
-                      <td className="px-4 py-4 text-sm">
-                        {renderOrderStatus(order.orderInfo.status)}
-                      </td>
-                      <td className="flex items-center justify-center mt-2 gap-2 mx-2">
-                        <select
-                          name="order-status"
-                          id="order-status"
-                          className="text-sm font-medium text-primary hover:underline "
-                          value={order.orderInfo.status}
-                          onChange={(e) => {
-                            setOrderStatus(e.target.value);
-                            changeOrderStatus(order.id, e.target.value);
-                          }}
-                        >
-                          <option value="" className="text-black">
-                            Selecciona un Estado
-                          </option>
-                          <option value="Pendiente" className="text-black">
-                            Pendiente
-                          </option>
-                          <option value="En preparación" className="text-black">
-                            En preparación
-                          </option>
-                          <option value="Completada" className="text-black">
-                            Completada
-                          </option>
-                        </select>
 
-                        <button
-                          onClick={() => deleteOrder(order.id)}
-                          className="p-2 bg-red-600 rounded-sm hover:bg-red-400 cursor-pointer"
-                        >
-                          <IconTrash stroke={2} />
-                        </button>
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex items-center justify-end gap-3 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                          <div className="relative">
+                            <select
+                              className="appearance-none rounded bg-background-dark border border-white/10 px-3 py-1 pr-8 text-xs text-gray-300 focus:outline-none focus:border-primary focus:text-primary cursor-pointer transition-colors"
+                              value={order.orderInfo.status}
+                              onChange={(e) =>
+                                changeOrderStatus(order.id, e.target.value)
+                              }
+                            >
+                              <option
+                                className="bg-background-dark"
+                                value="Pendiente"
+                              >
+                                Pendiente
+                              </option>
+                              <option
+                                className="bg-background-dark"
+                                value="En preparación"
+                              >
+                                En preparación
+                              </option>
+                              <option
+                                className="bg-background-dark"
+                                value="Completada"
+                              >
+                                Completada
+                              </option>
+                            </select>
+                            {/* Icono flecha custom para el select */}
+                            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-500">
+                              <svg
+                                className="h-3 w-3 fill-current"
+                                viewBox="0 0 20 20"
+                              >
+                                <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
+                              </svg>
+                            </div>
+                          </div>
+
+                          <button
+                            onClick={() => promptDelete(order.id)}
+                            className="rounded p-1.5 text-gray-500 hover:bg-red-500/10 hover:text-red-400 transition-colors border border-transparent hover:border-red-500/20"
+                            title="Eliminar pedido"
+                          >
+                            <IconTrash size={18} stroke={2} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
-                  );
-                })}
+                  ))
+                )}
               </tbody>
             </table>
           </div>
-        </div>
-        <div className="flex items-center justify-between border-t border-gray-200/10 pt-4 mt-4">
-          <p className="text-sm text-gray-400">
-            Mostrando <span className="font-medium text-white">1</span> a{" "}
-            <span className="font-medium text-white">5</span> de{" "}
-            <span className="font-medium text-white">97</span> resultados
-          </p>
-          <div className="flex items-center gap-2">
-            <button className="flex h-9 w-9 cursor-pointer items-center justify-center overflow-hidden rounded-lg bg-white/10 text-white text-sm font-bold hover:bg-white/20">
-              <span className="material-symbols-outlined text-base">
-                <IconChevronLeft stroke={2} />
-              </span>
-            </button>
-            <button className="flex h-9 w-9 cursor-pointer items-center justify-center overflow-hidden rounded-lg bg-primary text-background-dark text-sm font-bold">
-              1
-            </button>
-            <button className="flex h-9 w-9 cursor-pointer items-center justify-center overflow-hidden rounded-lg bg-white/10 text-white text-sm font-bold hover:bg-white/20">
-              2
-            </button>
-            <button className="flex h-9 w-9 cursor-pointer items-center justify-center overflow-hidden rounded-lg bg-white/10 text-white text-sm font-bold hover:bg-white/20">
-              3
-            </button>
-            <span className="text-gray-400">...</span>
-            <button className="flex h-9 w-9 cursor-pointer items-center justify-center overflow-hidden rounded-lg bg-white/10 text-white text-sm font-bold hover:bg-white/20">
-              20
-            </button>
-            <button className="flex h-9 w-9 cursor-pointer items-center justify-center overflow-hidden rounded-lg bg-white/10 text-white text-sm font-bold hover:bg-white/20">
-              <span className="material-symbols-outlined text-base">
-                <IconChevronRight stroke={2} />
-              </span>
-            </button>
+          <div className="border-t border-white/5 bg-white/2 px-6 py-4 flex justify-between items-center">
+            <span className="text-xs text-gray-500">
+              Total: {orders.length} pedidos
+            </span>
           </div>
         </div>
       </main>

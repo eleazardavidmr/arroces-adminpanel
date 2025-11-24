@@ -77,10 +77,10 @@ export default function Main() {
 
   // --- NUEVA LÓGICA: CÁLCULO DE TOTALES ---
   const metrics = useMemo(() => {
+    const meta = 50;
+
     const totalQuantity = orders.reduce((sum, order) => {
-      // Aseguramos que sea un número
       const qty = parseInt(order.orderInfo?.quantity) || 0;
-      // Solo sumamos si la orden NO está cancelada (opcional, depende de tu regla de negocio)
       if (order.orderInfo?.status === "Cancelada") return sum;
       return sum + qty;
     }, 0);
@@ -91,8 +91,11 @@ export default function Main() {
       return sum + total;
     }, 0);
 
-    return { totalQuantity, totalRevenue };
+    const faltan = Math.max(meta - totalQuantity, 0);
+
+    return { totalQuantity, totalRevenue, meta, faltan };
   }, [orders]);
+
   // -----------------------------------------
 
   const formatDate = (timestamp) => {
@@ -282,17 +285,25 @@ export default function Main() {
         {/* --- NUEVA SECCIÓN: TARJETAS DE MÉTRICAS (KPIs) --- */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 mb-6">
           {/* Tarjeta 1: Total Arroces Vendidos */}
-          <div className="rounded-xl border border-white/5 bg-white/2 p-5 shadow-lg flex items-center justify-between backdrop-blur-md">
-            <div className="flex flex-col">
-              <p className="text-sm font-medium text-gray-400 uppercase tracking-wider">
-                Arroces Vendidos
-              </p>
-              <p className="text-3xl font-extrabold text-background-light mt-1">
-                {context.formatNumber(metrics.totalQuantity)}
-              </p>
-            </div>
-            <div className="bg-primary/10 p-3 rounded-full text-primary">
-              <IconSoup size={32} stroke={1.5} />
+          <div className="flex items-center justify-center flex-col w-full">
+            <div className="rounded-xl border border-white/5 bg-white/2 p-5 shadow-lg flex flex-col justify-between backdrop-blur-md w-full">
+              <div className="flex items-center justify-center w-full">
+                <div className="flex flex-col w-full">
+                  <p className="text-sm font-medium text-gray-400 uppercase tracking-wider">
+                    Arroces Vendidos
+                  </p>
+                  <p className="text-3xl font-extrabold text-background-light mt-1">
+                    {context.formatNumber(metrics.totalQuantity)}
+                  </p>
+                </div>
+                <div className="bg-primary/10 p-3 rounded-full text-primary">
+                  <IconSoup size={32} stroke={1.5} />
+                </div>
+              </div>
+              <div className="flex items-center w-full">
+                <h3 className="text-sm text-slate-600">Faltan: </h3>
+                <span className="text-slate-600 text-sm">{metrics.faltan}</span>
+              </div>
             </div>
           </div>
 

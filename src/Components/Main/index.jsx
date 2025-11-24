@@ -7,9 +7,12 @@ import {
   IconChevronLeft,
   IconTrash,
   IconAlertTriangle,
+  IconRotate,
   IconX,
+  IconSoup, // Nuevo icono para el arroz
+  IconCash, // Nuevo icono para el dinero
 } from "@tabler/icons-react";
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useState, useMemo } from "react";
 import { db } from "../../firebase";
 import {
   collection,
@@ -21,8 +24,6 @@ import {
 import { ProductContext } from "../Context";
 
 // Badge de estado
-// Nota: Mantuve los colores semánticos (Verde/Amarillo) porque son universales,
-// pero ajusté la opacidad para que se vean bien sobre el fondo café.
 const StatusBadge = ({ status }) => {
   const styles = {
     Completada: "bg-green-500/20 text-green-400",
@@ -60,6 +61,8 @@ export default function Main() {
         id: doc.id,
         ...doc.data(),
       }));
+      // Opcional: Ordenar por fecha si tienes el campo date
+      // DBorders.sort((a, b) => b.date - a.date);
       setOrders(DBorders);
     } catch (e) {
       console.error("Error getting documents: ", e);
@@ -71,6 +74,26 @@ export default function Main() {
   useEffect(() => {
     loadOrders();
   }, []);
+
+  // --- NUEVA LÓGICA: CÁLCULO DE TOTALES ---
+  const metrics = useMemo(() => {
+    const totalQuantity = orders.reduce((sum, order) => {
+      // Aseguramos que sea un número
+      const qty = parseInt(order.orderInfo?.quantity) || 0;
+      // Solo sumamos si la orden NO está cancelada (opcional, depende de tu regla de negocio)
+      if (order.orderInfo?.status === "Cancelada") return sum;
+      return sum + qty;
+    }, 0);
+
+    const totalRevenue = orders.reduce((sum, order) => {
+      const total = parseInt(order.orderInfo?.total) || 0;
+      if (order.orderInfo?.status === "Cancelada") return sum;
+      return sum + total;
+    }, 0);
+
+    return { totalQuantity, totalRevenue };
+  }, [orders]);
+  // -----------------------------------------
 
   const formatDate = (timestamp) => {
     if (!timestamp) return "N/A";
@@ -129,18 +152,11 @@ export default function Main() {
     }
   };
 
-  // COLORES PERSONALIZADOS (Extraídos de tu paleta para referencia)
-  // Primary:background-dark(Naranja/Dorado)
-  // Bg Dark:background-dark(Café Oscuro)
-  // Text Light:background-light(Blanco Hueso)
-
   return (
-    // Aplicando el fondo oscuro background-dark y el texto clarobackground-light)
-    <main className="flex h-screen bg-background-dark text-background-light relative  selection:bg-background-dark selection:text-">
+    <main className="flex h-screen bg-background-dark text-background-light relative selection:bg-background-dark selection:text-primary ">
       {/* --- MODAL --- */}
       {orderToDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#15100a]/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          {/* El modal usa el mismo fondo dark pero con borde sutil */}
           <div className="w-full max-w-md transform overflow-hidden rounded-2xl bg-background-dark border border-background-dark/20 p-6 text-left shadow-2xl shadow-black/50 transition-all scale-100">
             <div className="flex items-center justify-between mb-5">
               <h3 className="text-lg font-medium leading-6 text-background-light flex items-center gap-2">
@@ -192,7 +208,6 @@ export default function Main() {
 
       {/* --- SIDEBAR --- */}
       {isAsideOpen && (
-        // Sidebar usa fondo oscuro + un borde muy sutil
         <aside className="flex w-64 flex-col border-r border-white/5 bg-background-dark p-4 h-full">
           <div className="flex flex-col gap-6">
             {/* Perfil */}
@@ -208,7 +223,6 @@ export default function Main() {
 
             {/* Navegación */}
             <nav className="flex flex-col gap-2">
-              {/* Item Activo: Usa el Primary background-dark */}
               <a
                 className="flex items-center gap-3 rounded-lg bg-background-dark/10 border border-background-dark/20 px-3 py-2 text-background-dark"
                 href="#"
@@ -216,7 +230,6 @@ export default function Main() {
                 <IconShoppingCart size={20} stroke={2} />
                 <span className="text-sm font-medium">Pedidos</span>
               </a>
-              {/* Items Inactivos */}
               <a
                 className="flex items-center gap-3 rounded-lg px-3 py-2 text-gray-400 hover:bg-white/5 hover:text-background-light transition-colors"
                 href="#"
@@ -266,14 +279,50 @@ export default function Main() {
           </div>
         </header>
 
-        {/* Tarjeta de la Tabla: Usamos white/5 sobre el fondo café para elevarla sutilmente */}
+        {/* --- NUEVA SECCIÓN: TARJETAS DE MÉTRICAS (KPIs) --- */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 mb-6">
+          {/* Tarjeta 1: Total Arroces Vendidos */}
+          <div className="rounded-xl border border-white/5 bg-white/2 p-5 shadow-lg flex items-center justify-between backdrop-blur-md">
+            <div className="flex flex-col">
+              <p className="text-sm font-medium text-gray-400 uppercase tracking-wider">
+                Arroces Vendidos
+              </p>
+              <p className="text-3xl font-extrabold text-background-light mt-1">
+                {context.formatNumber(metrics.totalQuantity)}
+              </p>
+            </div>
+            <div className="bg-primary/10 p-3 rounded-full text-primary">
+              <IconSoup size={32} stroke={1.5} />
+            </div>
+          </div>
+
+          {/* Tarjeta 2: Ingreso Total */}
+          <div className="rounded-xl border border-white/5 bg-white/2 p-5 shadow-lg flex items-center justify-between backdrop-blur-md">
+            <div className="flex flex-col">
+              <p className="text-sm font-medium text-gray-400 uppercase tracking-wider">
+                Ingreso Total
+              </p>
+              <p className="text-3xl font-extrabold text-primary mt-1">
+                $
+                {context.formatNumber
+                  ? context.formatNumber(metrics.totalRevenue)
+                  : metrics.totalRevenue}
+              </p>
+            </div>
+            <div className="bg-green-500/10 p-3 rounded-full text-green-400">
+              <IconCash size={32} stroke={1.5} />
+            </div>
+          </div>
+        </div>
+        {/* -------------------------------------------------- */}
+
+        {/* Tarjeta de la Tabla */}
         <div className="flex-1 overflow-hidden rounded-xl border border-white/5 bg-white/2 shadow-xl flex flex-col relative">
-          {/* Gradiente decorativo opcional en la parte superior para dar el toque "dorado" */}
-          <div className="absolute top-0 left-0 w-full h-1 bg-linear-to-r from-transparent via-primary/50 to-transparent opacity-50"></div>
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary/50 to-transparent opacity-50"></div>
 
           <div className="overflow-x-auto flex-1">
             <table className="w-full min-w-[1000px] text-left">
-              <thead className="bg-white/5 text-xs uppercase text-gray-400 font-semibold tracking-wider">
+              <thead className="bg-white/5 text-xs uppercase text-gray-400 font-semibold tracking-wider sticky top-0 backdrop-blur-md">
                 <tr>
                   <th className="px-6 py-4">Pedido</th>
                   <th className="px-6 py-4">Cliente</th>
@@ -348,9 +397,8 @@ export default function Main() {
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex flex-col">
-                          {/* PRECIO EN DORADO */}
                           <span className="font-bold text-primary text-base">
-                            ${order.orderInfo.total}
+                            ${context.formatNumber(order.orderInfo.total)}
                           </span>
                           <span className="text-xs text-gray-500">
                             {order.userInfo.payment.includes("Transferencia")
@@ -391,8 +439,13 @@ export default function Main() {
                               >
                                 Completada
                               </option>
+                              <option
+                                className="bg-background-dark"
+                                value="Cancelada"
+                              >
+                                Cancelada
+                              </option>
                             </select>
-                            {/* Icono flecha custom para el select */}
                             <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-500">
                               <svg
                                 className="h-3 w-3 fill-current"
@@ -421,6 +474,15 @@ export default function Main() {
           <div className="border-t border-white/5 bg-white/2 px-6 py-4 flex justify-between items-center">
             <span className="text-xs text-gray-500">
               Total: {orders.length} pedidos
+            </span>
+            <span
+              onClick={() => loadOrders()}
+              className="text-gray-500 hover:bg-primary/50 hover:text-black rounded-full flex items-center justify-center p-2 cursor-pointer transition-colors"
+            >
+              <IconRotate
+                stroke={2}
+                className={isLoading ? "animate-spin" : ""}
+              />
             </span>
           </div>
         </div>

@@ -13,6 +13,10 @@ export const ProductProvider = ({ children }) => {
     setIsChangeStatusModalOpen(false);
   };
 
+  const formatNumber = (number) => {
+    return new Intl.NumberFormat("es-CO").format(number);
+  };
+
   return (
     <ProductContext.Provider
       value={{
@@ -24,6 +28,7 @@ export const ProductProvider = ({ children }) => {
         closeChangeStatusModal,
         orderStatus,
         setOrderStatus,
+        formatNumber,
       }}
     >
       {children}

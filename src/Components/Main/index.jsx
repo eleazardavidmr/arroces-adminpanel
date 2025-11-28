@@ -53,6 +53,8 @@ export default function Main() {
 
   const context = useContext(ProductContext);
 
+  // ... (imports y otros hooks)
+
   const loadOrders = async () => {
     setIsLoading(true);
     try {
@@ -61,8 +63,18 @@ export default function Main() {
         id: doc.id,
         ...doc.data(),
       }));
-      // Opcional: Ordenar por fecha si tienes el campo date
-      // DBorders.sort((a, b) => b.date - a.date);
+
+      // 💡 LÓGICA DE ORDENAMIENTO POR FECHA (DESCENDENTE) 💡
+      // Si 'date' es un Timestamp de Firebase, lo convertimos a un objeto Date para compararlo.
+      DBorders.sort((a, b) => {
+        // Se usa el valor numérico (milisegundos) para la comparación
+        const dateA = a.date?.toDate ? a.date.toDate().getTime() : 0;
+        const dateB = b.date?.toDate ? b.date.toDate().getTime() : 0;
+        // Orden descendente (más reciente primero): b - a
+        return dateB - dateA;
+      });
+      // ----------------------------------------------------
+
       setOrders(DBorders);
     } catch (e) {
       console.error("Error getting documents: ", e);
@@ -70,6 +82,8 @@ export default function Main() {
       setIsLoading(false);
     }
   };
+
+  // ... (resto del componente)
 
   useEffect(() => {
     loadOrders();
@@ -309,19 +323,28 @@ export default function Main() {
 
           {/* Tarjeta 2: Ingreso Total */}
           <div className="rounded-xl border border-white/5 bg-white/2 p-5 shadow-lg flex items-center justify-between backdrop-blur-md">
-            <div className="flex flex-col">
-              <p className="text-sm font-medium text-gray-400 uppercase tracking-wider">
-                Ingreso Total
-              </p>
-              <p className="text-3xl font-extrabold text-primary mt-1">
-                $
-                {context.formatNumber
-                  ? context.formatNumber(metrics.totalRevenue)
-                  : metrics.totalRevenue}
-              </p>
-            </div>
-            <div className="bg-green-500/10 p-3 rounded-full text-green-400">
-              <IconCash size={32} stroke={1.5} />
+            <div className="flex flex-col w-full">
+              <div className="flex w-full">
+                <div className="flex flex-col justify-between w-full">
+                  <p className="text-sm font-medium text-gray-400 uppercase tracking-wider">
+                    Ingreso Total
+                  </p>
+                  <p className="text-3xl font-extrabold text-primary mt-1">
+                    $
+                    {context.formatNumber
+                      ? context.formatNumber(metrics.totalRevenue)
+                      : metrics.totalRevenue}
+                  </p>
+                </div>
+                <div className="bg-green-500/10 p-3 rounded-full text-green-400 w-fit">
+                  <IconCash size={32} stroke={1.5} />
+                </div>
+              </div>
+              <div className="text-slate-600 text-sm">
+                <span>
+                  Meta: <strong>$300.000</strong>
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -329,7 +352,7 @@ export default function Main() {
 
         {/* Tarjeta de la Tabla */}
         <div className="flex-1 overflow-hidden rounded-xl border border-white/5 bg-white/2 shadow-xl flex flex-col relative">
-          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary/50 to-transparent opacity-50"></div>
+          <div className="absolute top-0 left-0 w-full h-1 bg-linear-to-r from-transparent via-primary/50 to-transparent opacity-50"></div>
 
           <div className="overflow-x-auto flex-1">
             <table className="w-full min-w-[1000px] text-left">

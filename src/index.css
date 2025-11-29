@@ -6,6 +6,14 @@
   --color-primary: #ec9513;
   --color-background-light: #f8f7f6;
   --color-background-dark: #221b10;
+  --color-border-light: #e7decf;
+  --color-border-dark: #403422;
+  --color-surface-light: #fcfaf8;
+  --color-text-light: #1b160d;
+  --color-text-dark: #e8e3db;
+  --color-surface-dark: #2a2215;
+  --color-subtle-light: #9a7b4c;
+  --color-subtle-dark: #a38b63;
 
   --radius-DEFAULT: 0.5rem;
   --radius-lg: 1rem;

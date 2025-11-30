@@ -29,6 +29,7 @@ const StatusBadge = ({ status }) => {
     Completada: "bg-green-500/20 text-green-400",
     Pendiente: "bg-yellow-500/20 text-yellow-400",
     "En preparación": "bg-blue-500/20 text-blue-400",
+    Lista: "bg-teal-500/20 text-teal-400", // Nuevo estado agregado
     Cancelada: "bg-red-500/20 text-red-400",
   };
   const baseStyle =
@@ -471,6 +472,12 @@ export default function Main() {
                                 value="En preparación"
                               >
                                 En preparación
+                              </option>
+                              <option
+                                className="bg-background-light dark:bg-background-dark"
+                                value="Lista"
+                              >
+                                Lista
                               </option>
                               <option
                                 className="bg-background-light dark:bg-background-dark"

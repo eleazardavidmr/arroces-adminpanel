@@ -13,7 +13,7 @@ import {
   IconCash,
 } from "@tabler/icons-react";
 import { useContext, useMemo } from "react";
-import { ProductContext } from "../Context";
+import { ProductContext } from "../../Context";
 export default function Metrics() {
   const { orders, formatNumber } = useContext(ProductContext);
   const metrics = useMemo(() => {

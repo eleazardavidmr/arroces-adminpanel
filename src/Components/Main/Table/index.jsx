@@ -12,17 +12,26 @@ import {
   IconSoup,
   IconCash,
 } from "@tabler/icons-react";
-import { useState, useContext } from "react";
-import { ProductContext } from "../Context";
-import StatusBadge from "./StatusBadge";
-import { db } from "../../firebaseConfig";
-import { doc, updateDoc, deleteDoc } from "firebase/firestore";
+import {
+  collection,
+  getDocs,
+  doc,
+  updateDoc,
+  writeBatch,
+} from "firebase/firestore";
+import { useState, useContext, useEffect } from "react";
+import { ProductContext } from "../../Context";
+import StatusBadge from "../StatusBadge";
+import { db } from "../../../firebase";
 export default function Table() {
   const context = useContext(ProductContext);
   const [isLoading, setIsLoading] = useState(true);
-  const [orderToDelete, setOrderToDelete] = useState(null);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [isOrderSelected, setIsOrderSelected] = useState(false);
+  const [selectedOrderIds, setSelectedOrderIds] = useState(new Set());
+  const [bulkStatus, setBulkStatus] = useState("Pendiente");
+  const [isBulkUpdating, setIsBulkUpdating] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const { orders, setOrders, isDeleting, setOrderToDelete } = context;
+
   const formatDate = (timestamp) => {
     if (!timestamp) return "N/A";
     const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
@@ -35,8 +44,8 @@ export default function Table() {
   };
 
   const changeOrderStatus = async (orderId, newStatus) => {
-    const previousOrders = [...context.orders];
-    const updatedOrders = context.orders.map((order) => {
+    const previousOrders = [...orders];
+    const updatedOrders = orders.map((order) => {
       if (order.id === orderId) {
         return {
           ...order,
@@ -46,55 +55,185 @@ export default function Table() {
       return order;
     });
 
-    context.setOrders(updatedOrders);
+    setOrders(updatedOrders);
 
     try {
       const orderDocRef = doc(db, "orders", orderId);
       await updateDoc(orderDocRef, { "orderInfo.status": newStatus });
     } catch (error) {
       console.error("Error update:", error);
-      context.setOrders(previousOrders);
+      setOrders(previousOrders);
       alert("Error al actualizar estado");
-    }
-  };
-
-  const promptDelete = (orderId) => {
-    setOrderToDelete(orderId);
-  };
-
-  const confirmDelete = async () => {
-    if (!orderToDelete) return;
-
-    setIsDeleting(true);
-    try {
-      await deleteDoc(doc(db, "orders", orderToDelete));
-      context.setOrders((prevOrders) =>
-        prevOrders.filter((order) => order.id !== orderToDelete),
-      );
-      setOrderToDelete(null);
-    } catch (error) {
-      console.error("Error deleting:", error);
-      alert("Hubo un error al eliminar el pedido.");
-    } finally {
-      setIsDeleting(false);
     }
   };
 
   const handleSelectAllOrders = (e) => {
     const isChecked = e.target.checked;
-    console.log(
-      isChecked
-        ? "Seleccionar todos los pedidos"
-        : "Deseleccionar todos los pedidos",
-    );
-    setIsOrderSelected(isChecked);
+    if (isChecked) {
+      setSelectedOrderIds(new Set(orders.map((order) => order.id)));
+      return;
+    }
+    setSelectedOrderIds(new Set());
   };
+
+  const handleSelectOrder = (orderId, isChecked) => {
+    setSelectedOrderIds((prevSelected) => {
+      const nextSelected = new Set(prevSelected);
+      if (isChecked) {
+        nextSelected.add(orderId);
+      } else {
+        nextSelected.delete(orderId);
+      }
+      return nextSelected;
+    });
+  };
+
+  const applyBulkStatusChange = async () => {
+    if (selectedOrderIds.size === 0 || isBulkUpdating || isBulkDeleting) return;
+
+    const selectedIds = Array.from(selectedOrderIds);
+    const previousOrders = [...orders];
+    const updatedOrders = orders.map((order) =>
+      selectedOrderIds.has(order.id)
+        ? {
+            ...order,
+            orderInfo: { ...order.orderInfo, status: bulkStatus },
+          }
+        : order,
+    );
+
+    setIsBulkUpdating(true);
+    setOrders(updatedOrders);
+    try {
+      const batch = writeBatch(db);
+      selectedIds.forEach((orderId) => {
+        const orderDocRef = doc(db, "orders", orderId);
+        batch.update(orderDocRef, { "orderInfo.status": bulkStatus });
+      });
+      await batch.commit();
+    } catch (error) {
+      console.error("Error bulk update:", error);
+      setOrders(previousOrders);
+      alert("No se pudo actualizar el estado de los pedidos seleccionados.");
+    } finally {
+      setIsBulkUpdating(false);
+    }
+  };
+
+  const deleteSelectedOrders = async () => {
+    if (selectedOrderIds.size === 0 || isBulkDeleting || isBulkUpdating) return;
+    const shouldDelete = window.confirm(
+      "Estas seguro de eliminar todos los pedidos seleccionados? Esta accion no se puede deshacer.",
+    );
+    if (!shouldDelete) return;
+
+    const selectedIds = Array.from(selectedOrderIds);
+    setIsBulkDeleting(true);
+    try {
+      const batch = writeBatch(db);
+      selectedIds.forEach((orderId) => {
+        const orderDocRef = doc(db, "orders", orderId);
+        batch.delete(orderDocRef);
+      });
+      await batch.commit();
+      setOrders((prevOrders) =>
+        prevOrders.filter((order) => !selectedOrderIds.has(order.id)),
+      );
+      setSelectedOrderIds(new Set());
+    } catch (error) {
+      console.error("Error bulk delete:", error);
+      alert("No se pudieron eliminar los pedidos seleccionados.");
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  };
+
+  const loadOrders = async () => {
+    setIsLoading(true);
+    try {
+      const querySnapshot = await getDocs(collection(db, "orders"));
+      const DBorders = querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+
+      // 💡 LÓGICA DE ORDENAMIENTO POR FECHA (DESCENDENTE) 💡
+      // Si 'date' es un Timestamp de Firebase, lo convertimos a un objeto Date para compararlo.
+      DBorders.sort((a, b) => {
+        // Se usa el valor numérico (milisegundos) para la comparación
+        const dateA = a.date?.toDate ? a.date.toDate().getTime() : 0;
+        const dateB = b.date?.toDate ? b.date.toDate().getTime() : 0;
+        // Orden descendente (más reciente primero): b - a
+        return dateB - dateA;
+      });
+      // ----------------------------------------------------
+
+      setOrders(DBorders);
+    } catch (e) {
+      console.error("Error getting documents: ", e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadOrders();
+  }, []);
+
+  useEffect(() => {
+    setSelectedOrderIds((prevSelected) => {
+      const orderIdSet = new Set(orders.map((order) => order.id));
+      const nextSelected = new Set();
+      prevSelected.forEach((id) => {
+        if (orderIdSet.has(id)) nextSelected.add(id);
+      });
+      return nextSelected;
+    });
+  }, [orders]);
+
+  const areAllOrdersSelected =
+    orders.length > 0 && selectedOrderIds.size === orders.length;
 
   return (
     <div className="flex-1 overflow-hidden rounded-xl border border-border-light bg-surface-light shadow-xl flex flex-col relative dark:border-white/5 dark:bg-white/2">
       <div className="absolute top-0 left-0 w-full h-1 bg-linear-to-r from-transparent via-primary/50 to-transparent opacity-50"></div>
 
       <div className="overflow-x-auto flex-1">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-light/50 px-6 py-3 dark:border-white/5">
+          <span className="text-sm text-gray-600 dark:text-gray-300">
+            {selectedOrderIds.size > 0
+              ? `${selectedOrderIds.size} pedido(s) seleccionado(s)`
+              : "Selecciona pedidos para acciones masivas"}
+          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              className="appearance-none rounded bg-background-light border border-border-light/50 px-3 py-1.5 text-xs text-gray-700 focus:outline-none focus:border-primary focus:text-primary cursor-pointer transition-colors dark:bg-background-dark dark:border-white/10 dark:text-gray-300"
+              value={bulkStatus}
+              onChange={(e) => setBulkStatus(e.target.value)}
+              disabled={selectedOrderIds.size === 0 || isBulkUpdating || isBulkDeleting}
+            >
+              <option value="Pendiente">Pendiente</option>
+              <option value="En preparación">En preparación</option>
+              <option value="Lista">Lista</option>
+              <option value="Completada">Completada</option>
+              <option value="Cancelada">Cancelada</option>
+            </select>
+            <button
+              onClick={applyBulkStatusChange}
+              disabled={selectedOrderIds.size === 0 || isBulkUpdating || isBulkDeleting}
+              className="rounded border border-primary/30 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isBulkUpdating ? "Actualizando..." : "Cambiar estado"}
+            </button>
+            <button
+              onClick={deleteSelectedOrders}
+              disabled={selectedOrderIds.size === 0 || isBulkDeleting || isBulkUpdating}
+              className="rounded border border-red-500/30 px-3 py-1.5 text-xs font-medium text-red-500 hover:bg-red-500/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isBulkDeleting ? "Eliminando..." : "Eliminar seleccionados"}
+            </button>
+          </div>
+        </div>
         <table className="w-full min-w-[1000px] text-left">
           <thead className="bg-background-light/50 text-xs uppercase text-gray-600 font-semibold tracking-wider sticky top-0 backdrop-blur-md dark:bg-white/5 dark:text-gray-400">
             <tr>
@@ -102,6 +241,7 @@ export default function Table() {
                 <input
                   type="checkbox"
                   name="all-orders"
+                  checked={areAllOrdersSelected}
                   onChange={(e) => handleSelectAllOrders(e)}
                 />
               </th>
@@ -124,7 +264,7 @@ export default function Table() {
                   Cargando pedidos...
                 </td>
               </tr>
-            ) : context.orders.length === 0 ? (
+            ) : orders.length === 0 ? (
               <tr>
                 <td
                   colSpan="7"
@@ -134,13 +274,19 @@ export default function Table() {
                 </td>
               </tr>
             ) : (
-              context.orders.map((order) => (
+              orders.map((order) => (
                 <tr
                   className="hover:bg-primary/5 transition-colors group dark:hover:bg-white/3"
                   key={order.id}
                 >
                   <td className="px-6 py-4">
-                    <input type="checkbox" checked={isOrderSelected} />
+                    <input
+                      type="checkbox"
+                      checked={selectedOrderIds.has(order.id)}
+                      onChange={(e) =>
+                        handleSelectOrder(order.id, e.target.checked)
+                      }
+                    />
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex flex-col">
@@ -246,7 +392,8 @@ export default function Table() {
                       </div>
 
                       <button
-                        onClick={() => promptDelete(order.id)}
+                        onClick={() => setOrderToDelete(order.id)}
+                        disabled={isDeleting}
                         className="rounded p-1.5 text-gray-500 hover:bg-red-500/10 hover:text-red-500 transition-colors border border-transparent hover:border-red-500/20"
                         title="Eliminar pedido"
                       >
@@ -262,10 +409,10 @@ export default function Table() {
       </div>
       <div className="border-t border-border-light/50 bg-background-light/50 px-6 py-4 flex justify-between items-center dark:border-white/5 dark:bg-white/2">
         <span className="text-xs text-gray-500">
-          Total: {context.orders.length} pedidos
+          Total: {orders.length} pedidos
         </span>
         <span
-          onClick={() => context.loadOrders()}
+          onClick={loadOrders}
           className="text-gray-500 hover:bg-primary/50 hover:text-text-light rounded-full flex items-center justify-center p-2 cursor-pointer transition-colors dark:hover:text-black"
         >
           <IconRotate stroke={2} className={isLoading ? "animate-spin" : ""} />

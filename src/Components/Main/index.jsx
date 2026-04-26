@@ -15,7 +15,6 @@ import {
 import { useContext, useState, useMemo } from "react";
 import { ProductContext } from "../Context";
 import Table from "./Table";
-import { ProductContext } from "../Context";
 import Metrics from "./Metrics";
 import Modal from "./Modal";
 

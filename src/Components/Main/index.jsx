@@ -46,11 +46,11 @@ const StatusBadge = ({ status }) => {
 
 export default function Main() {
   const [orders, setOrders] = useState([]);
-  const [isAsideOpen, setIsAsideOpen] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
 
   const [orderToDelete, setOrderToDelete] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isOrderSelected, setIsOrderSelected] = useState(false);
 
   const context = useContext(ProductContext);
 
@@ -155,7 +155,7 @@ export default function Main() {
     try {
       await deleteDoc(doc(db, "orders", orderToDelete));
       setOrders((prevOrders) =>
-        prevOrders.filter((order) => order.id !== orderToDelete)
+        prevOrders.filter((order) => order.id !== orderToDelete),
       );
       setOrderToDelete(null);
     } catch (error) {
@@ -164,6 +164,16 @@ export default function Main() {
     } finally {
       setIsDeleting(false);
     }
+  };
+
+  const handleSelectAllOrders = (e) => {
+    const isChecked = e.target.checked;
+    console.log(
+      isChecked
+        ? "Seleccionar todos los pedidos"
+        : "Deseleccionar todos los pedidos",
+    );
+    setIsOrderSelected(isChecked);
   };
 
   return (
@@ -219,76 +229,10 @@ export default function Main() {
           </div>
         </div>
       )}
-
-      {/* --- SIDEBAR --- */}
-      {isAsideOpen && (
-        <aside className="flex w-64 flex-col border-r border-border-light/50 bg-surface-light p-4 h-full dark:border-white/5 dark:bg-background-dark">
-          <div className="flex flex-col gap-6">
-            {/* Perfil */}
-            <div className="flex items-center gap-3 px-2">
-              <div className="h-10 w-10 rounded-full border-2 border-border-dark/20 bg-gray-300 bg-[url('https://avatars.githubusercontent.com/u/9919?s=200&v=4')] bg-cover bg-center dark:border-background-dark/20 dark:bg-gray-700"></div>
-              <div className="flex flex-col">
-                <h1 className="text-sm font-bold text-text-light dark:text-background-light">
-                  Sara
-                </h1>
-                <p className="text-xs text-subtle-light dark:text-background-dark">
-                  Administradora
-                </p>
-              </div>
-            </div>
-
-            {/* Navegación */}
-            <nav className="flex flex-col gap-2">
-              <a
-                className="flex items-center gap-3 rounded-lg bg-primary/10 border border-primary/20 px-3 py-2 text-primary dark:bg-background-dark/10 dark:border-background-dark/20 dark:text-background-dark" // Elemento activo
-                href="#"
-              >
-                <IconShoppingCart size={20} stroke={2} />
-                <span className="text-sm font-medium">Pedidos</span>
-              </a>
-              <a
-                className="flex items-center gap-3 rounded-lg px-3 py-2 text-gray-600 hover:bg-primary/5 hover:text-primary transition-colors dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-background-light"
-                href="#"
-              >
-                <IconFolder size={20} stroke={1.5} />
-                <span className="text-sm font-medium">Productos</span>
-              </a>
-              <a
-                className="flex items-center gap-3 rounded-lg px-3 py-2 text-gray-600 hover:bg-primary/5 hover:text-primary transition-colors dark:text-gray-400 dark:hover:bg-white/5 dark:hover:text-background-light"
-                href="#"
-              >
-                <IconUsersGroup size={20} stroke={1.5} />
-                <span className="text-sm font-medium">Clientes</span>
-              </a>
-            </nav>
-          </div>
-
-          <div className="mt-auto">
-            <button
-              className="flex items-center gap-3 rounded-lg px-3 py-2 text-gray-600 hover:bg-red-500/10 hover:text-red-500 w-full transition-colors dark:text-gray-400 dark:hover:bg-red-500/10 dark:hover:text-red-400"
-              onClick={() => context.setIsLoggedIn(false)}
-            >
-              <IconLogout2 size={20} />
-              <span className="text-sm font-medium">Salir</span>
-            </button>
-          </div>
-        </aside>
-      )}
-
       {/* --- CONTENIDO PRINCIPAL --- */}
       <main className="flex flex-1 flex-col p-4 md:p-6 overflow-hidden">
         <header className="flex items-center justify-between gap-4 pb-6">
           <div className="flex items-center gap-3">
-            <button
-              className="rounded-lg bg-white/5 border border-white/5 p-2 text-gray-600 hover:bg-white/10 hover:text-primary transition-colors dark:text-gray-400 dark:bg-white/5 dark:border-white/5 dark:hover:bg-white/10"
-              onClick={() => setIsAsideOpen(!isAsideOpen)}
-            >
-              {isAsideOpen ? (
-                <IconChevronLeft size={20} />
-              ) : (
-                <IconChevronRight size={20} />
-              )}
-            </button>
             <h1 className="text-2xl font-bold text-text-light dark:text-background-light">
               Gestión de Pedidos
             </h1>
@@ -364,6 +308,13 @@ export default function Main() {
             <table className="w-full min-w-[1000px] text-left">
               <thead className="bg-background-light/50 text-xs uppercase text-gray-600 font-semibold tracking-wider sticky top-0 backdrop-blur-md dark:bg-white/5 dark:text-gray-400">
                 <tr>
+                  <th className="px-6 py-4">
+                    <input
+                      type="checkbox"
+                      name="all-orders"
+                      onChange={(e) => handleSelectAllOrders(e)}
+                    />
+                  </th>
                   <th className="px-6 py-4">Pedido</th>
                   <th className="px-6 py-4">Cliente</th>
                   <th className="px-6 py-4">Ubicación</th>
@@ -398,6 +349,9 @@ export default function Main() {
                       className="hover:bg-primary/5 transition-colors group dark:hover:bg-white/3"
                       key={order.id}
                     >
+                      <td className="px-6 py-4">
+                        <input type="checkbox" checked={isOrderSelected} />
+                      </td>
                       <td className="px-6 py-4">
                         <div className="flex flex-col">
                           <span className="font-mono text-xs text-primary">
@@ -450,7 +404,6 @@ export default function Main() {
                       <td className="px-6 py-4 text-center">
                         <StatusBadge status={order.orderInfo.status} />
                       </td>
-
                       <td className="px-6 py-4 text-right">
                         <div className="flex items-center justify-end gap-3 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                           <div className="relative">

@@ -1,6 +1,6 @@
 import { createContext, useEffect, useState } from "react";
 import { db } from "../../firebase";
-import { deleteDoc, doc } from "firebase/firestore";
+import { writeBatch, doc } from "firebase/firestore";
 
 export const ProductContext = createContext();
 
@@ -10,7 +10,7 @@ export const ProductProvider = ({ children }) => {
   const [orderStatus, setOrderStatus] = useState("Pendiente");
   const [orders, setOrders] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [orderToDelete, setOrderToDelete] = useState(null);
+  const [ordersToDelete, setOrdersToDelete] = useState([]);
   const [isDeleting, setIsDeleting] = useState(false);
 
   const openChangeStatusModal = () => {
@@ -24,16 +24,33 @@ export const ProductProvider = ({ children }) => {
     return new Intl.NumberFormat("es-CO").format(number);
   };
 
+  const openDeleteModal = (orderIds) => {
+    if (!orderIds) return;
+    const ids = Array.isArray(orderIds) ? orderIds : [orderIds];
+    if (ids.length === 0) return;
+    setOrdersToDelete(ids);
+  };
+
+  const closeDeleteModal = () => {
+    if (isDeleting) return;
+    setOrdersToDelete([]);
+  };
+
   const confirmDelete = async () => {
-    if (!orderToDelete || isDeleting) return;
+    if (ordersToDelete.length === 0 || isDeleting) return;
 
     setIsDeleting(true);
     try {
-      await deleteDoc(doc(db, "orders", orderToDelete));
+      const batch = writeBatch(db);
+      ordersToDelete.forEach((orderId) => {
+        batch.delete(doc(db, "orders", orderId));
+      });
+      await batch.commit();
+
       setOrders((prevOrders) =>
-        prevOrders.filter((order) => order.id !== orderToDelete),
+        prevOrders.filter((order) => !ordersToDelete.includes(order.id)),
       );
-      setOrderToDelete(null);
+      setOrdersToDelete([]);
     } catch (error) {
       console.error("Error deleting:", error);
       alert("Hubo un error al eliminar el pedido.");
@@ -58,8 +75,9 @@ export const ProductProvider = ({ children }) => {
         setOrders,
         isLoading,
         setIsLoading,
-        orderToDelete,
-        setOrderToDelete,
+        ordersToDelete,
+        openDeleteModal,
+        closeDeleteModal,
         isDeleting,
         confirmDelete,
       }}

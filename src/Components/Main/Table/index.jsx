@@ -17,7 +17,6 @@ import {
   getDocs,
   doc,
   updateDoc,
-  writeBatch,
 } from "firebase/firestore";
 import { useState, useContext, useEffect } from "react";
 import { ProductContext } from "../../Context";
@@ -29,8 +28,7 @@ export default function Table() {
   const [selectedOrderIds, setSelectedOrderIds] = useState(new Set());
   const [bulkStatus, setBulkStatus] = useState("Pendiente");
   const [isBulkUpdating, setIsBulkUpdating] = useState(false);
-  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
-  const { orders, setOrders, isDeleting, setOrderToDelete } = context;
+  const { orders, setOrders, isDeleting, openDeleteModal } = context;
 
   const formatDate = (timestamp) => {
     if (!timestamp) return "N/A";
@@ -89,7 +87,7 @@ export default function Table() {
   };
 
   const applyBulkStatusChange = async () => {
-    if (selectedOrderIds.size === 0 || isBulkUpdating || isBulkDeleting) return;
+    if (selectedOrderIds.size === 0 || isBulkUpdating || isDeleting) return;
 
     const selectedIds = Array.from(selectedOrderIds);
     const previousOrders = [...orders];
@@ -105,12 +103,11 @@ export default function Table() {
     setIsBulkUpdating(true);
     setOrders(updatedOrders);
     try {
-      const batch = writeBatch(db);
-      selectedIds.forEach((orderId) => {
-        const orderDocRef = doc(db, "orders", orderId);
-        batch.update(orderDocRef, { "orderInfo.status": bulkStatus });
-      });
-      await batch.commit();
+      await Promise.all(
+        selectedIds.map((orderId) =>
+          updateDoc(doc(db, "orders", orderId), { "orderInfo.status": bulkStatus }),
+        ),
+      );
     } catch (error) {
       console.error("Error bulk update:", error);
       setOrders(previousOrders);
@@ -120,32 +117,9 @@ export default function Table() {
     }
   };
 
-  const deleteSelectedOrders = async () => {
-    if (selectedOrderIds.size === 0 || isBulkDeleting || isBulkUpdating) return;
-    const shouldDelete = window.confirm(
-      "Estas seguro de eliminar todos los pedidos seleccionados? Esta accion no se puede deshacer.",
-    );
-    if (!shouldDelete) return;
-
-    const selectedIds = Array.from(selectedOrderIds);
-    setIsBulkDeleting(true);
-    try {
-      const batch = writeBatch(db);
-      selectedIds.forEach((orderId) => {
-        const orderDocRef = doc(db, "orders", orderId);
-        batch.delete(orderDocRef);
-      });
-      await batch.commit();
-      setOrders((prevOrders) =>
-        prevOrders.filter((order) => !selectedOrderIds.has(order.id)),
-      );
-      setSelectedOrderIds(new Set());
-    } catch (error) {
-      console.error("Error bulk delete:", error);
-      alert("No se pudieron eliminar los pedidos seleccionados.");
-    } finally {
-      setIsBulkDeleting(false);
-    }
+  const openBulkDeleteModal = () => {
+    if (selectedOrderIds.size === 0 || isDeleting || isBulkUpdating) return;
+    openDeleteModal(Array.from(selectedOrderIds));
   };
 
   const loadOrders = async () => {
@@ -210,7 +184,7 @@ export default function Table() {
               className="appearance-none rounded bg-background-light border border-border-light/50 px-3 py-1.5 text-xs text-gray-700 focus:outline-none focus:border-primary focus:text-primary cursor-pointer transition-colors dark:bg-background-dark dark:border-white/10 dark:text-gray-300"
               value={bulkStatus}
               onChange={(e) => setBulkStatus(e.target.value)}
-              disabled={selectedOrderIds.size === 0 || isBulkUpdating || isBulkDeleting}
+              disabled={selectedOrderIds.size === 0 || isBulkUpdating || isDeleting}
             >
               <option value="Pendiente">Pendiente</option>
               <option value="En preparación">En preparación</option>
@@ -220,17 +194,17 @@ export default function Table() {
             </select>
             <button
               onClick={applyBulkStatusChange}
-              disabled={selectedOrderIds.size === 0 || isBulkUpdating || isBulkDeleting}
+              disabled={selectedOrderIds.size === 0 || isBulkUpdating || isDeleting}
               className="rounded border border-primary/30 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isBulkUpdating ? "Actualizando..." : "Cambiar estado"}
             </button>
             <button
-              onClick={deleteSelectedOrders}
-              disabled={selectedOrderIds.size === 0 || isBulkDeleting || isBulkUpdating}
+              onClick={openBulkDeleteModal}
+              disabled={selectedOrderIds.size === 0 || isDeleting || isBulkUpdating}
               className="rounded border border-red-500/30 px-3 py-1.5 text-xs font-medium text-red-500 hover:bg-red-500/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isBulkDeleting ? "Eliminando..." : "Eliminar seleccionados"}
+              Eliminar seleccionados
             </button>
           </div>
         </div>
@@ -243,6 +217,7 @@ export default function Table() {
                   name="all-orders"
                   checked={areAllOrdersSelected}
                   onChange={(e) => handleSelectAllOrders(e)}
+                  className="h-4 w-4 cursor-pointer rounded border border-border-light/70 bg-background-light text-primary focus:ring-2 focus:ring-primary/50 focus:ring-offset-0 dark:border-white/20 dark:bg-background-dark"
                 />
               </th>
               <th className="px-6 py-4">Pedido</th>
@@ -286,6 +261,7 @@ export default function Table() {
                       onChange={(e) =>
                         handleSelectOrder(order.id, e.target.checked)
                       }
+                      className="h-4 w-4 cursor-pointer rounded border border-border-light/70 bg-background-light text-primary focus:ring-2 focus:ring-primary/50 focus:ring-offset-0 dark:border-white/20 dark:bg-background-dark"
                     />
                   </td>
                   <td className="px-6 py-4">
@@ -392,7 +368,7 @@ export default function Table() {
                       </div>
 
                       <button
-                        onClick={() => setOrderToDelete(order.id)}
+                        onClick={() => openDeleteModal(order.id)}
                         disabled={isDeleting}
                         className="rounded p-1.5 text-gray-500 hover:bg-red-500/10 hover:text-red-500 transition-colors border border-transparent hover:border-red-500/20"
                         title="Eliminar pedido"

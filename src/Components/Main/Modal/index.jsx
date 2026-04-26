@@ -15,10 +15,13 @@ import {
 import { ProductContext } from "../../Context";
 import { useContext } from "react";
 export default function Modal() {
-  const { orderToDelete, setOrderToDelete, isDeleting, confirmDelete } =
+  const { ordersToDelete, closeDeleteModal, isDeleting, confirmDelete } =
     useContext(ProductContext);
+
+  const isBulkDelete = ordersToDelete.length > 1;
+  const firstOrderId = ordersToDelete[0];
   return (
-    orderToDelete && (
+    ordersToDelete.length > 0 && (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-background-dark/80 dark:bg-[#15100a]/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
         <div className="w-full max-w-md transform overflow-hidden rounded-2xl bg-surface-light border border-border-light/20 dark:bg-background-dark dark:border-background-dark/20 p-6 text-left shadow-2xl shadow-black/50 transition-all scale-100">
           <div className="flex items-center justify-between mb-5">
@@ -30,7 +33,7 @@ export default function Modal() {
               Confirmar eliminación
             </h3>
             <button
-              onClick={() => setOrderToDelete(null)}
+              onClick={closeDeleteModal}
               className="text-gray-500 hover:text-text-dark dark:hover:text-background-dark transition-colors"
             >
               <IconX size={20} />
@@ -39,11 +42,23 @@ export default function Modal() {
 
           <div className="mt-2">
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              ¿Estás seguro de que deseas eliminar el pedido{" "}
-              <span className="font-mono text-primary dark:text-background-dark font-bold">
-                #{orderToDelete.slice(0, 6)}
-              </span>
-              ? Esta acción no se puede deshacer.
+              {isBulkDelete ? (
+                <>
+                  ¿Estás seguro de que deseas eliminar{" "}
+                  <span className="font-bold text-primary dark:text-background-dark">
+                    {ordersToDelete.length} pedidos
+                  </span>
+                  ? Esta acción no se puede deshacer.
+                </>
+              ) : (
+                <>
+                  ¿Estás seguro de que deseas eliminar el pedido{" "}
+                  <span className="font-mono text-primary dark:text-background-dark font-bold">
+                    #{firstOrderId?.slice(0, 6)}
+                  </span>
+                  ? Esta acción no se puede deshacer.
+                </>
+              )}
             </p>
           </div>
 
@@ -51,7 +66,7 @@ export default function Modal() {
             <button
               type="button"
               className="inline-flex justify-center rounded-lg border border-background-dark/10 bg-background-dark/5 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-background-dark/10 hover:text-text-light focus:outline-none transition-colors dark:border-white/10 dark:bg-white/5 dark:text-gray-300 dark:hover:bg-white/10 dark:hover:text-white"
-              onClick={() => setOrderToDelete(null)}
+              onClick={closeDeleteModal}
               disabled={isDeleting}
             >
               Cancelar

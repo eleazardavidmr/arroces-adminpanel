@@ -11,13 +11,9 @@ import {
   IconX,
   IconSoup,
   IconCash,
+  IconPhone,
 } from "@tabler/icons-react";
-import {
-  collection,
-  getDocs,
-  doc,
-  updateDoc,
-} from "firebase/firestore";
+import { collection, getDocs, doc, updateDoc } from "firebase/firestore";
 import { useState, useContext, useEffect } from "react";
 import { ProductContext } from "../../Context";
 import StatusBadge from "../StatusBadge";
@@ -105,7 +101,9 @@ export default function Table() {
     try {
       await Promise.all(
         selectedIds.map((orderId) =>
-          updateDoc(doc(db, "orders", orderId), { "orderInfo.status": bulkStatus }),
+          updateDoc(doc(db, "orders", orderId), {
+            "orderInfo.status": bulkStatus,
+          }),
         ),
       );
     } catch (error) {
@@ -184,7 +182,9 @@ export default function Table() {
               className="appearance-none rounded bg-background-light border border-border-light/50 px-3 py-1.5 text-xs text-gray-700 focus:outline-none focus:border-primary focus:text-primary cursor-pointer transition-colors dark:bg-background-dark dark:border-white/10 dark:text-gray-300"
               value={bulkStatus}
               onChange={(e) => setBulkStatus(e.target.value)}
-              disabled={selectedOrderIds.size === 0 || isBulkUpdating || isDeleting}
+              disabled={
+                selectedOrderIds.size === 0 || isBulkUpdating || isDeleting
+              }
             >
               <option value="Pendiente">Pendiente</option>
               <option value="En preparación">En preparación</option>
@@ -194,14 +194,18 @@ export default function Table() {
             </select>
             <button
               onClick={applyBulkStatusChange}
-              disabled={selectedOrderIds.size === 0 || isBulkUpdating || isDeleting}
+              disabled={
+                selectedOrderIds.size === 0 || isBulkUpdating || isDeleting
+              }
               className="rounded border border-primary/30 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isBulkUpdating ? "Actualizando..." : "Cambiar estado"}
             </button>
             <button
               onClick={openBulkDeleteModal}
-              disabled={selectedOrderIds.size === 0 || isDeleting || isBulkUpdating}
+              disabled={
+                selectedOrderIds.size === 0 || isDeleting || isBulkUpdating
+              }
               className="rounded border border-red-500/30 px-3 py-1.5 text-xs font-medium text-red-500 hover:bg-red-500/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Eliminar seleccionados
@@ -375,6 +379,15 @@ export default function Table() {
                       >
                         <IconTrash size={18} stroke={2} />
                       </button>
+                      <a
+                        href={`https://wa.me/${order.userInfo.phone}?`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="rounded p-1.5 text-gray-500 hover:bg-green-500/10 hover:text-green-500 transition-colors border border-transparent hover:border-green-500/20"
+                        title="Enviar mensaje al cliente"
+                      >
+                        <IconPhone size={18} stroke={2} />
+                      </a>
                     </div>
                   </td>
                 </tr>
